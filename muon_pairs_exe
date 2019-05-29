@@ -1,0 +1,17 @@
+#!/bin/bash
+
+tar -zxvf fairship.tar.gz
+export SHIPBUILD=/cvmfs/ship.cern.ch/SHiPBuild/
+cd FairShip
+./localBuild.sh
+cd ..
+cd FairShipRun
+source config.sh
+cd ..
+echo
+ls -l
+echo
+
+python parallel_make_pairs.py -jobid "$id"
+
+cp output to /eos/experiment/ship/user/amarshal/HUGE_GAN_random_id_pairs/

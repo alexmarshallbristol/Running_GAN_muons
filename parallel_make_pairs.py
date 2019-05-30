@@ -542,26 +542,34 @@ def ImpactParameter2(point,tPos,tMom):
 
 
 def create_pair(i,j):
-	key = tracks_file.GetListOfKeys()[i]
-	track_i = tracks_file.Get(str(key)[str(key).find('"')+1:str(key)[str(key).find('"')+1:].find('"')-len(str(key)[str(key).find('"')+1:])]+";1") 
+
+	'''
+		Load correct tracks from file, based on indexes i and j
+	'''
+
+	key_i = tracks_file.GetListOfKeys()[i]
+	track_i = tracks_file.Get(str(key_i)[str(key_i).find('"')+1:str(key_i)[str(key_i).find('"')+1:].find('"')-len(str(key_i)[str(key_i).find('"')+1:])]+";1") 
 
 	fitStatus_i   = track_i.getFitStatus()
 	fittedState_i = track_i.getFittedState()
 
-	key = tracks_file.GetListOfKeys()[j]
-	track_j = tracks_file.Get(str(key)[str(key).find('"')+1:str(key)[str(key).find('"')+1:].find('"')-len(str(key)[str(key).find('"')+1:])]+";1") 
+	key_j = tracks_file.GetListOfKeys()[j]
+	track_j = tracks_file.Get(str(key_j)[str(key_j).find('"')+1:str(key_j)[str(key_j).find('"')+1:].find('"')-len(str(key_j)[str(key_j).find('"')+1:])]+";1") 
 
 	fitStatus_j   = track_j.getFitStatus()
 	fittedState_j = track_j.getFittedState()
 
-	# Can now play with track properties...
-	nmeas_i = fitStatus_i.getNdf()
-	P_i= fittedState_i.getMomMag()
-	nmeas_j = fitStatus_j.getNdf()
-	P_j = fittedState_j.getMomMag()
+	'''
+		Can now play with track properties...
+	'''
 
-	print(' ')
-	print(i,j,':',P_i, P_j, nmeas_i, nmeas_j)
+
+	'''
+		Get nmeas and reduced chi2
+	'''
+
+	nmeas_i = fitStatus_i.getNdf()
+	nmeas_j = fitStatus_j.getNdf()
 
 	chi2_i = fitStatus_i.getChi2()
 	prob_i = ROOT.TMath.Prob(chi2_i,int(nmeas_i))
@@ -571,51 +579,94 @@ def create_pair(i,j):
 	prob_j = ROOT.TMath.Prob(chi2_j,int(nmeas_j))
 	rchi2_j = chi2_j/nmeas_j
 
-	print(rchi2_i, rchi2_j)
 
-	# add this after - use example of getting MCTruth hits from parallel_pair_job_information.py 
-	# hits_in_straw_stations = np.zeros(4)
-	# for ahit in sTree.Digi_StrawtubesHits:
-	# 	detID = ahit.GetDetectorID()
-	# 	if int(str(detID)[:1]) == 1:
-	# 		hits_in_straw_stations[0] = 1
-	# 	if int(str(detID)[:1]) == 2:
-	# 		hits_in_straw_stations[1] = 1
-	# 	if int(str(detID)[:1]) == 3:
-	# 		hits_in_straw_stations[2] = 1
-	# 	if int(str(detID)[:1]) == 4:
-	# 		hits_in_straw_stations[3] = 1
-	# hits_before_and_after = 0
-	# if hits_in_straw_stations[0] == 1 or hits_in_straw_stations[1] == 1:
-	# 	if hits_in_straw_stations[2] == 1 or hits_in_straw_stations[3] == 1:
-	# 		hits_before_and_after = 1
+	'''
+		Reconstructed momentum
+	'''
 
-	# print(hits_before_and_after)
+	P_i= fittedState_i.getMomMag()
+	P_j = fittedState_j.getMomMag()
+
+
+	'''
+		Need to check there are digi hits in straw tubes before and after magnet, for example:
+			hits_before_and_after_i = 1 yes
+			hits_before_and_after_i = 0 no
+
+		Past this point sTree_i and sTree_j can be used to access MC truth hits for each track
+	'''
+
+ 	id_num_i = np.where(track_location_array == str(key_i)[str(key_i).find('"')+1:str(key_i)[str(key_i).find('"')+1:].find('"')-len(str(key_i)[str(key_i).find('"')+1:])])[0][0]
+ 	file_random_id_i = int(list_of_file_ID[int(track_location_array[id_num_i][0])])
+	specific_file_i = file_path_start + str(file_random_id_i) + file_path_end
+	event_id_i = int(track_location_array[i][1])
+
+	f_i = ROOT.TFile(specific_file_i)
+
+	sTree_i = f_i.cbmsim
+	sTree_i.GetEntry(event_id_i)
+	hits_in_straw_stations_i = np.zeros(4)
+	for ahit in sTree_i.Digi_StrawtubesHits:
+		detID = ahit.GetDetectorID()
+		if int(str(detID)[:1]) == 1:
+			hits_in_straw_stations_i[0] = 1
+		if int(str(detID)[:1]) == 2:
+			hits_in_straw_stations_i[1] = 1
+		if int(str(detID)[:1]) == 3:
+			hits_in_straw_stations_i[2] = 1
+		if int(str(detID)[:1]) == 4:
+			hits_in_straw_stations_i[3] = 1
+	hits_before_and_after_i = 0
+	if hits_in_straw_stations_i[0] == 1 or hits_in_straw_stations_i[1] == 1:
+		if hits_in_straw_stations_i[2] == 1 or hits_in_straw_stations_i[3] == 1:
+			hits_before_and_after_i = 1
+
+
+	id_num_j = np.where(track_location_array == str(key_j)[str(key_j).find('"')+1:str(key_j)[str(key_j).find('"')+1:].find('"')-len(str(key_j)[str(key_j).find('"')+1:])])[0][0]
+ 	file_random_id_j = int(list_of_file_ID[int(track_location_array[id_num_j][0])])
+	specific_file_j = file_path_start + str(file_random_id_j) + file_path_end
+	event_id_j = int(track_location_array[j][1])
+
+	f_j = ROOT.TFile(specific_file_j)
+
+	sTree_j = f_j.cbmsim
+	sTree_j.GetEntry(event_id_j)
+	hits_in_straw_stations_j = np.zeros(4)
+	for ahit in sTree_j.Digi_StrawtubesHits:
+		detID = ahit.GetDetectorID()
+		if int(str(detID)[:1]) == 1:
+			hits_in_straw_stations_j[0] = 1
+		if int(str(detID)[:1]) == 2:
+			hits_in_straw_stations_j[1] = 1
+		if int(str(detID)[:1]) == 3:
+			hits_in_straw_stations_j[2] = 1
+		if int(str(detID)[:1]) == 4:
+			hits_in_straw_stations_j[3] = 1
+	hits_before_and_after_j = 0
+	if hits_in_straw_stations_j[0] == 1 or hits_in_straw_stations_j[1] == 1:
+		if hits_in_straw_stations_j[2] == 1 or hits_in_straw_stations_j[3] == 1:
+			hits_before_and_after_j = 1
+
+	'''
+		Use RedoVertexing() to produce DOCA and Fiducial bool: 1 yes and 0 no
+	'''
 
 	pair = [fittedState_i,fittedState_j]
-	# PosDir = {} 
-	# PosDir[0] = [pair[0].getPos(),pair[0].getDir()]
-	# PosDir[1] = [pair[1].getPos(),pair[1].getDir()]
+
 	xv,yv,zv,doca = RedoVertexing(pair[0],pair[1])
 	fid = isInFiducial(xv,yv,zv)
 	if fid == True:
 		fid = 1
 	elif fid == False:
 		fid = 0
-	print(fid)
+
+
+	'''
+		Combine momentum of the two tracks to create HNLMom, use with HNLPos in ImpactParameter2() to get dist
+	'''
 
 	mom_i = [pair[0].getMom()[0],pair[0].getMom()[1],pair[0].getMom()[2]]
 	mom_j = [pair[1].getMom()[0],pair[1].getMom()[1],pair[1].getMom()[2]]
-
-	mom_i_mag = math.sqrt(mom_i[0]**2 + mom_i[1]**2 + mom_i[2]**2)
-	mom_j_mag = math.sqrt(mom_j[0]**2 + mom_j[1]**2 + mom_j[2]**2)
-
-	pair_mom = mom_i_mag + mom_j_mag
-
-	# print(mom_i)
-	# print(mom_j)
-	# print(' ')
-
 
 	HNLPos = [xv,yv,zv]
 
@@ -625,9 +676,12 @@ def create_pair(i,j):
 	tr = ROOT.TVector3(0,0,ShipGeo.target.z0)
 	dist = ImpactParameter2(tr,HNLPos,HNLMom)
 
-	print(dist)
 
+	'''
+		Get initial momentum of each muon in the target - will use this for KDE GAN weights later on
+	'''
 
+	pair_weight = track_truth_data[i][0]*track_truth_data[j][0]
 
 
 
@@ -636,6 +690,7 @@ def create_pair(i,j):
 	Cuts: DO NOT CUT - SAVE ALL
 
 		- P -
+		- straw digi hits before and after magnet
 		- nmeas -
 		- chi2/dof -
 		- DOCA -
@@ -659,8 +714,9 @@ def create_pair(i,j):
 		- used for KDE weights
 
 	'''
+	pair_information = [pair_weight, nmeas_i, nmeas_j, rchi2_i, rchi2_j, P_i, P_j, hits_before_and_after_i, hits_before_and_after_j, doca, fid, dist, xv, yv, zv, np.sqrt(HNLMom[0]**2+HNLMom[1]**2+HNLMom[2]**2)]
 
-	return
+	return pair_information
 
 
 import shipVeto
@@ -684,9 +740,15 @@ tracks_file = ROOT.TFile("tracks.root","read")
 
 list_of_file_ID = np.load('list_of_file_ID.npy')
 
+track_truth_data = np.load('track_truth_data.npy')
+
+file_path_start = '/eos/experiment/ship/user/amarshal/HUGE_GAN_random_id_FairSHiP/GAN_ship.conical.MuonBack-TGeant4_rec_'
+file_path_end = '.root'
+
 number_of_fittracks = float(np.shape(track_location_array)[0])
 # number_of_fittracks = 213.
 
+collected_pair_info = np.empty((0,16))
 
 pairs_run_through = 0
 
@@ -712,7 +774,12 @@ for i in range(int(job_order[job_id][1]), int(number_of_fittracks)):
 			else:
 				pairs_run_through += 1
 				# print([i,j])
-				create_pair(i,j)
+
+				if pairs_run_through%100 == 0:
+					print(pairs_run_through)
+
+				pair_info = create_pair(i,j)
+				collected_pair_info = np.append(collected_pair_info, [pair_info], axis=0)
 	else:
 		for j in range(i+1, int(number_of_fittracks)):
 
@@ -722,13 +789,23 @@ for i in range(int(job_order[job_id][1]), int(number_of_fittracks)):
 			else:
 				pairs_run_through += 1
 				# print([i,j])
-				create_pair(i,j)
+				if pairs_run_through%100 == 0:
+					print(pairs_run_through)
+
+				pair_info = create_pair(i,j)
+				collected_pair_info = np.append(collected_pair_info, [pair_info], axis=0)
 
 	first_i = False
 
 	if i == finish_major and j == finish_minor:
 			break
 print(pairs_run_through)
+
+print(np.shape(collected_pair_info))
+
+print('Complete pair creation.')
+
+np.save('collected_pair_info',collected_pair_info)
 
 # save output to /eos/experiment/ship/user/amarshal/HUGE_GAN_random_id_pairs/
 

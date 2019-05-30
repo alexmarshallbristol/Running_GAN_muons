@@ -568,72 +568,119 @@ tracks_file = ROOT.TFile("tracks.root","read")
 
 list_of_file_ID = np.load('list_of_file_ID.npy')
 
-cycle_hits = True
+save_track_truth_data = np.empty((0,16))
 
-save_array = np.empty((0,4))
+# [weight, x_i, y_i, z_i, px_i, py_i, pz_i, sbt_bool, rpc_bool, x_ves, y_ves, z_ves, px_ves, py_ves, pz_ves, reco_mom]
+
+GAN_KDE_ratio = np.load('GAN_KDE_ratio.npy')
+x_values_bins_limits = np.load('x_values_bins_limits_35.npy')
+y_values_bins_limits = np.load('y_values_bins_limits_35.npy')
+
 
 for key in tracks_file.GetListOfKeys():
-	print(' ')
+	# print(' ')
 	track = tracks_file.Get(str(key)[str(key).find('"')+1:str(key)[str(key).find('"')+1:].find('"')-len(str(key)[str(key).find('"')+1:])]+";1")
 	fitStatus   = track.getFitStatus()
 	fittedState = track.getFittedState()
 
 	# Can now play with track properties...
 	nmeas = fitStatus.getNdf()
-	P = fittedState.getMomMag()
+	P_reco = fittedState.getMomMag()
+
+	# Acquiring MC truth level information of muon event that produced track...
+	id_num = np.where(track_location_array == str(key)[str(key).find('"')+1:str(key)[str(key).find('"')+1:].find('"')-len(str(key)[str(key).find('"')+1:])])[0][0]
+	file_random_id = int(list_of_file_ID[int(track_location_array[id_num][0])])
+	# print('Track is from file:',file_random_id)
+	specific_file = file_path_start + str(file_random_id) + file_path_end
+	event_id = int(track_location_array[id_num][1])
+	f = ROOT.TFile(specific_file)
+	sTree = f.cbmsim
+	nEvents = min(sTree.GetEntries(),nEvents)
+	sTree.GetEntry(event_id)
 
 
-	print(P, nmeas)
-
-	if cycle_hits == True:
-		# Acquiring MC truth level information of muon event that produced track...
-		id_num = np.where(track_location_array == str(key)[str(key).find('"')+1:str(key)[str(key).find('"')+1:].find('"')-len(str(key)[str(key).find('"')+1:])])[0][0]
-		file_random_id = int(list_of_file_ID[int(track_location_array[id_num][0])])
-		print('Track is from file:',file_random_id)
-		specific_file = file_path_start + str(file_random_id) + file_path_end
-		event_id = int(track_location_array[id_num][1])
-		f = ROOT.TFile(specific_file)
-		sTree = f.cbmsim
-		nEvents = min(sTree.GetEntries(),nEvents)
-		sTree.GetEntry(event_id)
-
-		# Save information in following way, for example:
-		'''
-		strawtubesPoint = sTree.strawtubesPoint
-
-		for e in strawtubesPoint:
-			save_array = np.append(save_array, [[e.GetX(),e.GetY(),e.GetZ(), e.GetPx(), e.GetPy(), e.GetPz(),np.sqrt(np.add(e.GetPx()**2,np.add(e.GetPy()**2,e.GetPz()**2)))]], axis=0)
-		'''
-		
-
-		# EXAMPLE SAVING...
-
-		strawtubesPoint = sTree.strawtubesPoint
-
-		for e in strawtubesPoint:
-			save_array = np.append(save_array, [[e.GetX(),e.GetY(),np.sqrt(np.add(e.GetPx()**2,e.GetPy()**2)),e.GetPz()]], axis=0)
-			break # Only save the first hit
+	for e in sTree.MCTrack:
+		initial_px = e.GetPx()
+		initial_py = e.GetPy()
+		initial_pz = e.GetPz()
+		initial_x = e.GetStartX()
+		initial_y = e.GetStartY()
+		initial_z = e.GetStartZ()
+		break
 
 
+	# weight = 1
 
-# EXAMPLE PLOT...
-print(np.shape(save_array))
+	p_index = np.digitize(np.sqrt(initial_px**2+initial_py**2+initial_pz**2), x_values_bins_limits)
+	pt_index = np.digitize(np.sqrt(initial_px**2+initial_py**2), y_values_bins_limits)
 
-cmap = plt.get_cmap('viridis')
-cmap.set_under(color='white') 
+	weight = (1/np.fliplr(GAN_KDE_ratio.T)[p_index-1,pt_index-1])*0.97505166029109325 # correction factor obtained with /afs/cern.ch/user/a/amarshal/What_breaks_shield/get_ratio_for_weight_normalisation_35.py script. 
 
-plt.hist2d(save_array[:,0],save_array[:,1],bins=35,range=[[-300,300],[-500,500]], cmap=cmap,vmin=1E-7)
-plt.ylabel('Y')
-plt.xlabel('X')
-plt.savefig('plots/pos_strawtubes')
-plt.close('all')
+	# print(weight)
+
+	vaccum_vessel_hits_temp = np.empty((0,7))
+	hits_SBT_bool = 0
+	for e in sTree.vetoPoint:
+		hits_SBT_bool = 1
+		vaccum_vessel_hits_temp = np.append(vaccum_vessel_hits_temp,[[e.GetX(),e.GetY(),e.GetZ(),e.GetPx(),e.GetPy(),e.GetPz(),e.GetTime()]],axis=0)
+	
+	hits_RPC_bool = 0
+	for e in sTree.ShipRpcPoint:
+		hits_RPC_bool = 1
+		vaccum_vessel_hits_temp = np.append(vaccum_vessel_hits_temp,[[e.GetX(),e.GetY(),e.GetZ(),e.GetPx(),e.GetPy(),e.GetPz(),e.GetTime()]],axis=0)
+
+	
+	first_vac_hit = vaccum_vessel_hits_temp[np.where(vaccum_vessel_hits_temp[:,6]==np.amin(vaccum_vessel_hits_temp[:,6]))[0][0]]
+	save_track_truth_data = np.append(save_track_truth_data, [[weight, initial_x, initial_y, initial_z, initial_px, initial_py, initial_pz, hits_SBT_bool, hits_RPC_bool, first_vac_hit[0], first_vac_hit[1], first_vac_hit[2], first_vac_hit[3], first_vac_hit[4], first_vac_hit[5], P_reco]], axis=0)
 
 
-plt.hist2d(save_array[:,2],save_array[:,3],bins=35, cmap=cmap,vmin=1E-7)
-plt.ylabel('P_z')
-plt.xlabel('P_t')
-plt.savefig('plots/mom_strawtubes')
-plt.close('all')
+print(np.shape(save_track_truth_data))
+
+np.save('track_truth_data',save_track_truth_data)
+# cmap = plt.get_cmap('viridis')
+# cmap.set_under(color='white') 
+
+
+# # plt.hist(save_track_truth_data[:,0],bins=25)
+# # plt.savefig('plots/test2')
+# # plt.close('all')
+
+
+# # quit()
+# p_t_list = np.sqrt(save_track_truth_data[:,4]**2+save_track_truth_data[:,5]**2)
+
+# # plt.figure(figsize=(8,4))
+# # plt.subplot(1,2,1)
+# plt.hist2d(save_track_truth_data[:,6],p_t_list,bins=100, weights=save_track_truth_data[:,0], cmap=cmap,vmin=1E-7)
+# plt.ylabel('P_t start')
+# plt.xlabel('P_z start')
+
+# # plt.subplot(1,2,2)
+# # plt.hist2d(save_track_truth_data[:,3],save_track_truth_data[:,2],bins=35, cmap=cmap,vmin=1E-7)
+# # plt.ylabel('y start')
+# # plt.xlabel('z start')
+# plt.colorbar()
+# plt.savefig('plots/test')
+# plt.close('all') 
+
+# # plt.figure(figsize=(8,4))
+# # plt.subplot(1,2,1)
+# # plt.hist2d(vaccum_vessel_hits[:,3],vaccum_vessel_hits[:,4],bins=35, cmap=cmap,vmin=1E-7)
+# # plt.ylabel('y')
+# # plt.xlabel('x')
+# # plt.subplot(1,2,2)
+# # plt.hist2d(vaccum_vessel_hits[:,5],vaccum_vessel_hits[:,4],bins=35, cmap=cmap,vmin=1E-7)
+# # plt.ylabel('y')
+# # plt.xlabel('z')
+# # plt.savefig('plots/pos_vaccum_ves')
+# # plt.close('all') 
+
+
+# # plt.hist2d(vaccum_vessel_hits[:,2],vaccum_vessel_hits[:,3],bins=35, cmap=cmap,vmin=1E-7)
+# # plt.ylabel('P_z')
+# # plt.xlabel('P_t')
+# # plt.savefig('plots/mom_strawtubes')
+# # plt.close('all')
 
 
 
